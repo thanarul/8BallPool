@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter Player Names</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Welcome to Thanush's Pool Game</h1>
+    <form id="player-names-form"> 
+        <label for="player1">Player 1 Name:</label><br>
+        <input type="text" id="player1" name="player1" required><br>
+        <label for="player2">Player 2 Name:</label><br>
+        <input type="text" id="player2" name="player2" required><br><br>
+        <input type="submit" value="Start Game">
+    </form>
+    
+    <script>
+    $(document).ready(function() {
+        $('#player-names-form').submit(function(event) {
+            event.preventDefault(); 
+            const player1 = $('#player1').val();
+            const player2 = $('#player2').val();
+            localStorage.setItem('player1', player1);
+            localStorage.setItem('player2', player2);
+            window.location.href = "index.html";
+        });
+    });
+    </script>
+</body>
+</html>
