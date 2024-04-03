@@ -15,18 +15,29 @@
         <input type="text" id="player2" name="player2" required><br><br>
         <input type="submit" value="Start Game">
     </form>
-    
     <script>
-    $(document).ready(function() {
-        $('#player-names-form').submit(function(event) {
-            event.preventDefault(); 
-            const player1 = $('#player1').val();
-            const player2 = $('#player2').val();
-            localStorage.setItem('player1', player1);
-            localStorage.setItem('player2', player2);
-            window.location.href = "index.html";
+        $(document).ready(function() {
+            $('#player-names-form').submit(function(event) {
+                event.preventDefault(); 
+                const player1 = $('#player1').val();
+                const player2 = $('#player2').val();
+                $.ajax({
+                    type: 'POST',
+                    url: '/submit_player_names',
+                    data: JSON.stringify({ playerName1: player1, playerName2: player2 }),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function(response) {
+                        console.log('Player names submitted successfully');
+                        window.location.href = "index.html";
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error submitting player names:', error);
+                    }
+                });
+            });
         });
-    });
-    </script>
+        </script>
+        
 </body>
 </html>

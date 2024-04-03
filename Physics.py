@@ -426,9 +426,10 @@ class Database:
 				ball = StillBall(ballNo, ballPosition)
 			# add the object to the table 
 			table += ball
+		self.conn.commit()
 		cur.close()
 		return table
-		
+
 
 	def writeTable(self, table):
 
@@ -448,37 +449,37 @@ class Database:
 				ballID = cur.lastrowid
 				cur.execute("INSERT INTO BallTable (BALLID,TABLEID) VALUES (?, ?)", (ballID, tableID))
 
+		self.conn.commit()
 
 		return tableID - 1
 
 	def getGame(self, gameID):
+		"""
+		Retrieves and returns details for a specified game by its ID from the Game table.
+		"""
 		cur = self.conn.cursor()
-		# retriving the game details from the database and returning a tuple with gameID, gameName, player1Name, player2Name 
-		self.cursor.execute(""" 
-			SELECT g.GAMENAME, p1.PLAYER1NAME, p2.PLAYER2NAME
-			FROM GAME g
-			JOIN Player p1 ON g.GAMEID = p1.GAMEID
-			JOIN Player p2 on g.GAMEID = p2.GAMEID AND p1.PLAYERID < p2.PLAYERID 
-			WHERE g.GAMEID = ? 
-			""", (gameID))
-		gameName, player1Name, player2Name = self.cursor.fetchone()
+		# Execute a query to fetch the game details by its ID
+		cur.execute("SELECT * FROM Game WHERE GAMEID = ?", (gameID,))
+		# Commit the transaction to ensure database integrity
 		self.conn.commit()
-		cur.close()
-		return gameID, gameName, player1Name, player2Name
+		
+		# Fetch and return the first (and should be only) result of the query
+		return cur.fetchone()
 
 
 	def setGame(self, gameName, player1Name, player2Name):
 		cur = self.conn.cursor()
 		# insert and set a new game into the database and returns new gameID 
 		query = "INSERT into Game (GAMENAME) VALUES (?)"
-		cur.execute(query, (gameName,))
+		self.cursor.execute(query, (gameName,))
 		self.conn.commit()
 		#retrieve gameID 
-		cur.execute("SELECT GAMEID FROM Game WHERE GAMENAME=?", (gameName,))
+		self.cursor.execute("SELECT GAMEID FROM Game WHERE GAMENAME=?", (gameName,))
 		result = self.cursor.fetchone() 
 		if result is None:
 			gameID = 1
-		gameID = result[0]
+		else:
+			gameID = result[0]
 		# insert player records into the player table 
 		self.cursor.execute("INSERT INTO Player (GAMEID, PLAYERNAME) VALUES (?, ?)", (gameID, player1Name))
 		self.cursor.execute("INSERT INTO Player (GAMEID, PLAYERNAME) VALUES (?, ?)", (gameID, player2Name))
@@ -488,39 +489,38 @@ class Database:
 		return gameID - 1
 
 
-
 	def newShot(self, gameName, playerName):
 		
 		cur = self.conn.cursor()
-
 		cur.execute("SELECT GAMEID FROM Game WHERE GAMENAME=?", (gameName,))
 		result = cur.fetchone() 
 		if result is None:
 			gameID = 1
-		gameID = result[0]
+		else:
+			gameID = result[0]
 
 		#finding the playerID for the given playerName and Gameid
 		cur.execute("SELECT PLAYERID FROM Player WHERE PLAYERNAME=? AND GAMEID=?", (playerName, gameID))
 		result = cur.fetchone()
 		if result is None: 
 			gameID = 1
-		
-		playerID = result[0]
-
+		else:
+			playerID = result[0]
 		#inserting the new shot entry 
 		cur.execute("INSERT INTO Shot (PLAYERID, GAMEID) VALUES (?, ?)", (playerID, gameID))
 		shotID = cur.lastrowid
+		self.conn.commit()
 		cur.close()
 		return shotID
 
-	def getLastTableID(self):
-		self.cursor.execute("SELECT MAX(TABLEID) FROM TTable")
-		result = self.cursor.fetchone()
+	def getLastTableID(self, beforeShot = None):
+		cur = self.conn.cursor()
+		cur.execute("SELECT MAX(TABLEID) FROM TTable")
+		result = cur.fetchone()
 		if result and result[0] is not None:
 			return result[0]
 		else:
 			return 0   
-
 
 	def close(self):
 		self.conn.commit()
@@ -528,23 +528,40 @@ class Database:
 
 class Game():
 
-	def __init__(self, gameID = None, gameName=None, player1Name=None, player2Name=None):
+	def __init__(self, gameID=None, gameName=None, player1Name=None, player2Name=None):
+		self.db = Database() 
+		self.db.createDB()
 
-		self.db = Database()
-		if gameID is None and all([gameName, player1Name, player2Name]): 
+		# Initialize variables
+		self.gameID = None
+		self.gameName = None
+		self.player1Name = None
+		self.player2Name = None
+
+		# Error handling for invalid parameter combinations
+		if gameID is not None and (gameName is not None or player1Name is not None or player2Name is not None):
+			raise TypeError("Invalid")
+		# Fetch game details if only gameID is provided
+		if gameID is not None and (gameName is None and player1Name is None and player2Name is None):
+			gameDetails = self.db.getGame(gameID)
+			if gameDetails:
+				self.gameID = gameID
+				self.gameName = gameDetails[0]
+				self.player1Name = gameDetails[1] 
+				# self.player2Name = gameDetails[2]
+			else:
+				raise ValueError("Game with ID {} not found.".format(gameID))
+
+		# Set a new game in the database when gameID is not provided 
+		elif gameName is not None and player1Name is not None and player2Name is not None and gameID is None:
 			self.gameID = self.db.setGame(gameName, player1Name, player2Name)
 			self.gameName = gameName
 			self.player1Name = player1Name
 			self.player2Name = player2Name
-
-		elif gameID is not None:
-			gameDetails = self.db.getGame(gameID)
-			if gameDetails:
-				self.gameID, self.gameName, self.player1Name, self.player2Name = gameDetails
-			else:
-				raise ValueError("error")
 		else:
-			raise TypeError("error")
+			raise TypeError("Invalid")
+
+	
 
 	def shoot(self, gameName, playerName, table, xvel, yvel):
 
@@ -553,13 +570,16 @@ class Game():
 		#add a shot entry and get the shotID 
 		shotID = db.newShot(gameName, playerName)
 		#find the cue ball
-		cue_Ball, xpos, ypos = table.cueBall()
+		cue_Ball = table.cueBall()
 		if not cue_Ball:
 			return None
 
-		#storing the current position 
-		xpos = cue_Ball.obj.still_ball.pos.x
+		cue_Ball,xpos,ypos = cue_Ball
+
+		# pos = Coordinate(cue_Ball.obj.still_ball.pos.x, cue_Ball.obj.still_ball.pos.y)
+	
 		ypos = cue_Ball.obj.still_ball.pos.y
+		xpos = cue_Ball.obj.still_ball.pos.y
 
 		# setting the cue ball attributes for a rolling ball
 		cue_Ball.type = phylib.PHYLIB_ROLLING_BALL
@@ -568,6 +588,7 @@ class Game():
 		cue_Ball.obj.rolling_ball.pos.y = ypos
 		cue_Ball.obj.rolling_ball.vel.x = xvel
 		cue_Ball.obj.rolling_ball.vel.y = yvel 
+		tableID = None
 		# calculate the speed of the cue ball 
 		speed = (xvel**2 + yvel**2)**0.5
 		if speed > VEL_EPSILON:
@@ -596,8 +617,7 @@ class Game():
 			# move to the next segment 
 			table = segment
 			startTime = segment.time
-
-		self.conn.commit()
-		# cur.close()
-		# db.close()
+		
+		cur.close()
+		db.close()
 		return tableID

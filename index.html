@@ -39,6 +39,10 @@
         ${svg_content}
     </div>
     <script>
+        let svgContentLoaded = false
+        // $(document).ready(function() {
+        //     simulateAndDisplayShot();
+        // });
         let dragging = false;
         let startPoint = {x: 0, y: 0};
 
@@ -49,115 +53,144 @@
             alert("Tracking is now ON");
         }
 
-        function getSVGPoint(evt) {
-            const svg = document.querySelector('svg');
-            const point = svg.createSVGPoint();
-            point.x = evt.clientX;
-            point.y = evt.clientY;
-            return point.matrixTransform(svg.getScreenCTM().inverse());
-        }
+    function getSVGPoint(event){
+        // selecting svg element 
+        const svg = document.querySelector('svg');
+        const point = svg.createSVGPoint();
+        // assign the x coordinate 
+        point.x = event.clientX;
+        // assign the y coordinate 
+        point.y = event.clientY;
+        return point.matrixTransform(svg.getScreenCTM().inverse());
+    }
 
-        const velocityScaleFactor = 10;
-        $(document).ready(function() {
-            var tracking = false;
-            svgContentLoaded = true;
-            $('.game-container').hide();
-            const player1Name = localStorage.getItem('player1');
-            const player2Name = localStorage.getItem('player2');
-            $('#player1-name').text(player1Name);
-            $('#player2-name').text(player2Name);
-        
-            $.ajax({
-                url: '/get_svg_content', 
-                type: 'POST',
-                dataType: 'text', 
-                cache: false,
-                success: function(svg_content) {
-                    $('.game-container').html(svg_content);
-                    $('.game-container').show();
-                    attachEventHandlers();
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error occurred:', error); 
-                }
-            });
+    const velocityScaleFactor = 10;
+    $(document).ready(function() {
+        var tracking = false;
+        svgContentLoaded = true;
+        $('.game-container').hide();
+        const player1Name = localStorage.getItem('player1');
+        const player2Name = localStorage.getItem('player2');
+        $('#player1-name').text(player1Name);
+        $('#player2-name').text(player2Name);
+        // ajax request to get the svg content for the game 
+        $.ajax({
+            url: '/get_svg_content', 
+            type: 'POST',
+            dataType: 'text', 
+            cache: false,
+            success: function(svg_content) {
+                $('.game-container').html(svg_content); // inserting the svg into game container
+                $('.game-container').show(); // show the game container 
+                attachEventHandlers();
+            },
+            error: function(xhr, status, error) {
+                console.error('Error occurred:', error); 
+            }
         });
-        function attachEventHandlers() {
-            let isDragging = false;
-            let point = {x: 0, y: 0};
-            let line;
-            function screenToSVG(x, y, svgElement) {
-                let point = svgElement.createSVGPoint();
-                point.x = x;
-                point.y = y;
-                let svgPoint = point.matrixTransform(svgElement.getScreenCTM().inverse());
-                return { x: svgPoint.x, y: svgPoint.y };
-            }
-            $('.game-container svg').on('mousedown', '#cue-ball', function(event) {
-                const svgElement = $('.game-container svg')[0];
-                const svgRect = svgElement.getBoundingClientRect();
-                const point = screenToSVG(event.clientX, event.clientY, svgElement);
-                isDragging = true;
-                line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                $(line).attr({
-                    'x1': point.x,
-                    'y1': point.y,
-                    'x2': point.x,
-                    'y2': point.y,
-                    'stroke': 'black',
-                    'stroke-width': 5
-                });
-                $(svgElement).append(line);
-            });
-            $(window).on('mousemove', function(event) {
-                if (!isDragging) return;
-                const svgElement = $('.game-container svg')[0];
-                const point = screenToSVG(event.clientX, event.clientY, svgElement);
-                $(line).attr({'x2': point.x, 'y2': point.y});
-            });
-            $(window).on('mouseup', function(event) {
-                isDragging = false;
-                const svgElement = $('.game-container svg')[0];
-                const releasePoint = screenToSVG(event.clientX, event.clientY, svgElement);
-                let xVelocityValue = releasePoint.x - startPoint.x;
-                let yVelocityValue = releasePoint.y - startPoint.y;
-                let velocity = {x: xVelocityValue, y: yVelocityValue};
+    });
 
-                let velX = xVelocityValue;
-                let velY = yVelocityValue;
-                let {accX, accY} = calculateAcc(velX, velY);
-                $(line).remove();
-
-                $.ajax({
-                    url: '/submit_shot',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({
-                        dx: xVelocityValue,
-                        dy: yVelocityValue
-                    }),
-                    success: function(data) {
-                        console.log('Shot processed:', data);
-                    },
-                    error: function(error) {
-                        console.error('Error:', error);
+    function attachEventHandlers() {
+        let isDragging = false;
+        let point = {};
+        let line = null;
+        document.querySelector('.game-container svg')
+        function screenToSVG(x, y, svgElement) {
+            let point = svgElement.createSVGPoint();
+            point.x = x;
+            point.y = y;
+            return point.matrixTransform(svgElement.getScreenCTM().inverse());
+        }
+        $('#cue-ball').on('mousedown', function(event) {
+            const svgElement = $('.game-container svg')[0];
+            svgElement.getBoundingClientRect();
+            const point = screenToSVG(event.clientX, event.clientY, svgElement);
+            isDragging = true;
+            line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            $(line).attr({
+                'x1': point.x,
+                'y1': point.y,
+                'x2': point.x,
+                'y2': point.y,
+                'stroke': 'black',
+                'stroke-width': 5
+            });
+            $(svgElement).append(line);
+        });
+        $(window).on('mousemove', function(event) {
+            if (!isDragging) return;
+            const svgElement = $('.game-container svg')[0];
+            const point = screenToSVG(event.clientX, event.clientY, svgElement);
+            $(line).attr({'x2': point.x, 'y2': point.y});
+        });
+        $(window).on('mouseup', function(event) {
+            if (!isDragging) return;
+            isDragging = false;
+            const svgElement = $('.game-container svg')[0];
+            const releasePoint = screenToSVG(event.clientX, event.clientY, svgElement);
+            let xVelocityValue = (releasePoint.x - startPoint.x) * 100;
+            let yVelocityValue = (releasePoint.y - startPoint.y) * 100;
+            $(line).remove();
+            // AJAX request to submit the shot info 
+            $.ajax({
+                url: '/submit_shot',
+                type: 'POST',
+                contentType: 'application/json',
+                // sending the velocity as json
+                dataType: JSON.stringify({ 
+                    dx: xVelocityValue,
+                    dy: yVelocityValue
+                }),
+                success: function(data) {
+                    console.log('Shot processed:', data);
+                    if (dataType && dataType.frames) {
+                        displayFrames(data.frames)
                     }
-                });
-            });
+                    else {
+                        console.error('Error')
+                    }
+                },
+                error: function(error) {
+                    console.error('Error:', error);
+                }
+            }); 
+        });
+    }
+    
+    function calculateAcc(velX, velY, dragCoefficient = 0.1, velEpsilon = 0.01) {
+        let speed = Math.sqrt(velX ** 2 + velY ** 2);
+        let accX = 0;
+        let accY = 0;
+        if (speed > velEpsilon) {
+            dragForceDirectionX = -velX / speed;
+            dragForceDirectionY = -velY / speed;
+            accX = dragForceDirectionX * dragCoefficient;
+            accY = dragForceDirectionY * dragCoefficient;
         }
-        
-        function calculateAcc(velX, velY, dragCoefficient = 0.1, velEpsilon = 0.01) {
-            let speed = Math.sqrt(velX ** 2 + velY ** 2);
-            let accX = 0;
-            let accY = 0;
-            if (speed > velEpsilon) {
-                dragForceDirectionX = -velX / speed;
-                dragForceDirectionY = -velY / speed;
-                accX = dragForceDirectionX * dragCoefficient;
-                accY = dragForceDirectionY * dragCoefficient;
+        return {accX, accY};
+    }
+    // function to display the frames 
+    function displayFrames(frames) {
+        let currFrame = 0;
+        function displayNextFrame() {
+            // checking to see if all the frames have been displayed 
+            if (currFrame >= frames.length) {
+                console.log("frames displayed")
+                return;
             }
-            return {accX, accY};
+            // getting the svg for the current frame 
+            const frameSVG = frames[currFrame].svg;
+            if(frameSVG) {
+                $('.game-container').html(frameSVG);
+                currFrame++;
+                // scheduling the next frame 
+                setTimeout(displayNextFrame, 1);
+            } else {
+                console.error('error SVG data.');
+            }
         }
+        displayNextFrame(); 
+    }
     </script>
 </body>
 </html>
